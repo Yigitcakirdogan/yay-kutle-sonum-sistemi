@@ -1,50 +1,45 @@
-# Yay-Kütle-Sönüm Sistemi
+# Discrete-Time Mass-Spring-Damper Simulation & Embedded C PID Control (`yay-kutle-sonum-sistemi`)
 
-Lineer zamanla değişmeyen bir yay-kütle-sönüm sisteminin sonlu farklar yöntemi kullanılarak Python ile simülasyonu.
+![Control Theory](https://img.shields.io/badge/Domain-Discrete--Time%20Control%20%26%20DSP-00599C?style=flat-square&logo=c)
+![Languages](https://img.shields.io/badge/Implementation-Python%20%2B%20Embedded%20C99-2EA44F?style=flat-square)
+![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)
 
-## Sistem Modeli
+Numerical discretization and closed-loop control of a **Linear Time-Invariant (LTI) second-order mechanical Mass-Spring-Damper system** using **Finite Difference Approximation (Sonlu Farklar Yöntemi)** in Python and a **deterministic Embedded C PID controller** (`embedded_c/discrete_pid.c`) suitable for real-time microcontroller execution (`TIM` periodic ISR on STM32/Cortex-M4F).
 
-Sistemin diferansiyel denklemi:
+---
 
-mẍ + cẋ + kx = F(t)
+## Mathematical Formulation
 
-Kullanılan sistem parametreleri:
+The continuous-time equation of motion for a 1-DOF mass-spring-damper system subjected to an external control/disturbance force $F(t)$ is:
 
-- Kütle: 1 kg
-- Sönüm katsayısı: 0.5 N·s/m
-- Yay sabiti: 10 N/m
-- Dış kuvvet: 1 N
-- Zaman adımı: 0.01 s
-- Simülasyon süresi: 5 s
+$$m \frac{d^2x(t)}{dt^2} + c \frac{dx(t)}{dt} + k x(t) = F(t)$$
 
-## Yöntem
+Using backward finite differences with fixed sampling period $T_s$ ($\Delta t$):
 
-Sistem durum değişkenleri kullanılarak modellenmiş ve sonlu farklar yöntemi ile sayısal olarak çözülmüştür.
+$$\dot{x}[n] \approx \frac{x[n] - x[n-1]}{T_s}, \qquad \ddot{x}[n] \approx \frac{x[n] - 2x[n-1] + x[n-2]}{T_s^2}$$
 
-Hız:
+Substituting into the governing ODE yields the **causal recurrence equation** executed at each discrete sample instant $n$:
 
-v[n] = v[n-1] + Δt · a[n-1]
+$$x[n] = \frac{T_s^2 F[n] + (2m + c T_s) x[n-1] - m x[n-2]}{m + c T_s + k T_s^2}$$
 
-Konum:
+---
 
-x[n] = x[n-1] + Δt · v[n-1]
+## Closed-Loop Embedded Control Topology
 
-## Kullanılan Teknolojiler
+```mermaid
+flowchart LR
+    REF["Target Position r[n]"] --> SUM(("+ / -"))
+    SUM -- "Error e[n]" --> PID["Discrete PID Controller\n(Anti-Windup + Derivative on Measurement)"]
+    PID -- "Actuator Force F[n]" --> PLANT["Discrete LTI Plant\nm*x'' + c*x' + k*x = F"]
+    PLANT -- "Position x[n]" --> OUT["Output Displacement"]
+    OUT -- "Feedback" --> SUM
+```
 
-- Python 3.13
-- NumPy
-- Tkinter
+---
 
-## Çalıştırma
+## Embedded C Implementation (`embedded_c/discrete_pid.c`)
 
-Gerekli paketleri yükleyin:
-
-pip install -r requirements.txt
-
-Ardından:
-
-python yay_simulasyon.py
-
-## Proje
-
-Bu çalışma, dinamik sistemlerin sonlu farklar yöntemi ile sayısal simülasyonunu gerçekleştirmek amacıyla hazırlanmıştır.
+To bridge theoretical simulation with real-world firmware, this repository includes a production-ready C99 discrete PID controller featuring:
+- **Clamping Integrator Anti-Windup:** Prevents actuator saturation overshoot.
+- **Derivative-on-Measurement ($-\frac{K_d}{T_s}(x[n] - x[n-1])$):** Eliminates destructive "derivative kick" when the setpoint $r[n]$ changes abruptly.
+- **Discrete Plant Difference Equation Solver:** Runs in $O(1)$ time with zero dynamic memory allocation inside a hardware timer interrupt (`1 kHz` control loop).
